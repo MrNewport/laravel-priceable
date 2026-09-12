@@ -33,7 +33,7 @@ return new class extends Migration {
 
             $table->timestamps();
 
-            $table->index(['priceable_id', 'priceable_type', 'min_quantity', 'max_quantity']);
+            $table->index(['priceable_id', 'priceable_type', 'min_quantity', 'max_quantity'], 'prices_priceable_quantity_index');
         });
     }
 

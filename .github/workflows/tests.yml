@@ -1,0 +1,53 @@
+name: Package compatibility
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  laravel:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        testbench: ['^9.9', '^10.0', '^11.0']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: shivammathur/setup-php@b604ade2a87db23f8871b7182e69ec5e75effb45
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          extensions: pdo_sqlite
+          coverage: none
+      - name: Resolve Laravel version
+        env:
+          TESTBENCH_VERSION: ${{ matrix.testbench }}
+        run: |
+          composer require --dev "orchestra/testbench:$TESTBENCH_VERSION" --no-update
+          composer update --no-interaction --prefer-dist
+      - run: composer validate --strict && composer test
+  mysql:
+    runs-on: ubuntu-24.04
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: package-test-only
+          MYSQL_DATABASE: package_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -ppackage-test-only"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: shivammathur/setup-php@b604ade2a87db23f8871b7182e69ec5e75effb45
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          extensions: pdo_mysql
+          coverage: none
+      - run: composer update --no-interaction --prefer-dist
+      - run: php scripts/mysql-migrations.php
+        env:
+          MYSQL_TEST_HOST: 127.0.0.1
+          MYSQL_TEST_DATABASE: package_test
+          MYSQL_TEST_USERNAME: root
+          MYSQL_TEST_PASSWORD: package-test-only

@@ -78,12 +78,13 @@ class PriceCalculator
             $query->whereDoesntHave('scopes');
         } else {
             // If scopes are passed, ensure we only return prices that match all of them
-            $query->whereHas('scopes', function ($scopeQuery) use ($scopes) {
-                foreach ($scopes as $type => $value) {
+            $query->has('scopes', '=', count($scopes));
+            foreach ($scopes as $type => $value) {
+                $query->whereHas('scopes', function ($scopeQuery) use ($type, $value) {
                     $scopeQuery->where('scope_type', $type)
                         ->where('scope_value', $value);
-                }
-            }, '=', count($scopes));
+                });
+            }
         }
 
         // Return the best match

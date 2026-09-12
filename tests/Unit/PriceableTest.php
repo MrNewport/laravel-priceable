@@ -104,3 +104,25 @@ test('it throws exception if configured and no price found', function () {
 
     $product->priceFor(5);
 })->throws(PriceNotFoundException::class);
+
+
+test('it matches multiple scopes on their separate rows', function () {
+    $product = ProductTestModel::create(['name' => 'Wholesale product']);
+    $price = $product->prices()->create(['min_quantity' => 1, 'unit_price' => 75]);
+    $price->scopes()->createMany([
+        ['scope_type' => 'region', 'scope_value' => 'US'],
+        ['scope_type' => 'channel', 'scope_value' => 'B2B'],
+    ]);
+
+    expect($product->priceFor(1, null, ['region' => 'US', 'channel' => 'B2B']))->toBe(75.0);
+    expect($product->priceFor(1, null, ['channel' => 'B2B', 'region' => 'US']))->toBe(75.0);
+    expect($product->priceFor(1, null, ['region' => 'US', 'channel' => 'retail']))->toBeNull();
+    expect($product->priceFor(1, null, ['region' => 'US']))->toBeNull();
+});
+
+
+test('the documented helper is autoloaded', function () {
+    $product = ProductTestModel::create(['name' => 'Helper product']);
+    $product->prices()->create(['min_quantity' => 1, 'unit_price' => 23.5]);
+    expect(\MrNewport\LaravelPriceable\Support\price_for($product))->toBe(23.5);
+});

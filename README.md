@@ -56,7 +56,7 @@ Everything is **self-contained**, including the test suite, which uses an **in-m
 ## Requirements
 
 - **PHP**: ^8.0
-- **Laravel**: ^9.0 or ^10.0
+- **Laravel**: 9 through 13 (current CI covers Laravel 11, 12 and 13)
 - **Database**: Any supported by Laravel (tested primarily on MySQL & SQLite).
 
 ---
@@ -237,7 +237,7 @@ When retrieving the price, pass scopes as an associative array:
 $price = $product->priceFor(10, $user, ['region' => 'US']);
 ```
 
-Only prices containing **all** matching scopes (`region=US`) will be considered. If none match, it falls back as configured.
+Scoped prices must match every supplied dimension and must not contain additional restrictions that the caller did not supply. For example, a price restricted to both `region=US` and `channel=B2B` requires both values. Each scope is matched on its own row.
 
 ---
 
@@ -257,7 +257,7 @@ Alternatively, you can use:
 
 1. **Facade**:
     ```php
-    use MrNewport\LaravelPriceable\Facades\Priceable;
+    use MrNewport\LaravelPriceable\Facades\PriceableFacade as Priceable;
 
     $price = Priceable::getPrice($product, 12, $user, ['region' => 'US']);
     ```
@@ -307,7 +307,7 @@ The tests are **completely self-contained** and use **in-memory SQLite**. No ext
 To run tests:
 
 ```bash
-vendor/bin/phpunit
+composer test
 ```
 
 ### How It Works
