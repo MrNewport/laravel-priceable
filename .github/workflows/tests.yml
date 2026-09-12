@@ -20,6 +20,9 @@ jobs:
       - name: Resolve Laravel version
         env:
           TESTBENCH_VERSION: ${{ matrix.testbench }}
+          # Legacy Laravel 11 is tested only in this disposable runner. Current
+          # Laravel jobs and consumer Composer configuration retain blocking.
+          COMPOSER_POLICY_ADVISORIES_BLOCK: ${{ matrix.testbench == '^9.9' && '0' || '1' }}
         run: |
           composer require --dev "orchestra/testbench:$TESTBENCH_VERSION" --no-update
           composer update --no-interaction --prefer-dist

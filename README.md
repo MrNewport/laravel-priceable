@@ -304,6 +304,8 @@ If the current date/time is outside that range, the system **ignores** this pric
 
 The tests are **completely self-contained** and use **in-memory SQLite**. No external references to your application’s models or factories.
 
+The Laravel 11 compatibility job runs historical framework code in a disposable CI runner. Its advisory install block is disabled for that job only; Laravel 12/13 jobs and consumer Composer settings keep their normal security checks. No application is deployed from this compatibility job.
+
 To run tests:
 
 ```bash
