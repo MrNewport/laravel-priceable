@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 — 2026-09-12
+
+Fix the namespaced helper guard so an application-level `price_for` function cannot suppress the package helper. Requiring the helper file again is safe. Revalidated on Laravel 12 and 13.31 with a clean production consumer.
+
 ## 1.1.0
 
 - Support Laravel 12 and 13, and declare the Eloquent database dependency directly.
