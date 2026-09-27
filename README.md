@@ -20,6 +20,7 @@ This README walks you through **installation**, **configuration**, **usage**, **
     - [Price Lists & User-Specific Pricing](#price-lists--user-specific-pricing)
     - [Scopes (Region, Channel, etc.)](#scopes-region-channel-etc)
     - [Retrieving a Price](#retrieving-a-price)
+    - [Resolving an Exact Saved Record](#resolving-an-exact-saved-record)
 8. [Fallback Logic & Exception Handling](#fallback-logic--exception-handling)
 9. [Advanced: Date-Range Pricing](#advanced-date-range-pricing)
 10. [Testing](#testing)
@@ -44,7 +45,7 @@ Everything is **self-contained**, including the test suite, which uses an **in-m
 ## Key Features
 
 - **Tiered / Quantity-Based Pricing**: Price changes automatically when buyers hit certain quantity thresholds.
-- **Multi-Tenant Support**: Assign price lists to specific users or entire groups.
+- **User Price Lists**: Assign price lists to users; application relations enforce tenant ownership.
 - **Scopes**: Add region, channel, or any additional dimension to fine-tune pricing.
 - **Date-Based Validity**: Start and end dates for promotional or seasonal pricing.
 - **Fallback & Exceptions**: Gracefully handle missing specialized prices.
@@ -106,9 +107,9 @@ return [
 ```
 
 - `auto_load_migrations`: If `true`, migrations inside `src/database/migrations` will be auto-loaded by the package.
-- `fallback_to_default_price`: When a user’s price list doesn’t match, fallback to the “default” price (where `price_list_id` is `null`).
+- `fallback_to_default_price`: Retains the legacy missing-price policy described below. Setting this to `false` does not suppress an existing default price.
 - `throw_exception_if_no_price_found`: If no price is found (even after fallback), throw a `PriceNotFoundException` instead of returning `null`.
-- `default_currency`: The default currency used in your price records.
+- `default_currency`: Retained configuration key; the resolver and model do not apply it. The supplied migration defaults the currency column to `USD`. Explicitly set and restrict currency in your application.
 
 ---
 
@@ -271,14 +272,83 @@ Alternatively, you can use:
 
 ---
 
+### Resolving an Exact Saved Record
+
+Use `priceRecordFor()` when the caller needs the selected row's identity, currency,
+or amount representation without the legacy float return conversion:
+
+```php
+$price = $product->priceRecordFor(
+    quantity: 1,
+    scopes: ['currency' => 'USD', 'room' => '101'],
+    effectiveAt: new DateTimeImmutable('2026-12-01 12:00:00', new DateTimeZone('UTC')),
+);
+
+$savedAmount = $price?->getRawOriginal('unit_price');
+```
+
+The service equivalent is `PriceCalculator::resolvePrice()`, with the same
+arguments after the product. Both return `?Price`, including an application-owned
+subclass supplied by the product's `prices()` relationship. They retain quantity
+tiers, user price-list order, exact scope matching, fallback policy, and inclusive
+`valid_from`/`valid_to` boundaries. A null clock uses the existing current-time
+selection and protected `findPrice()` extension hook. `priceFor()` and `getPrice()`
+continue to return `?float` for existing callers.
+
+An explicit-clock call uses the new protected `findPriceAt()` hook. Existing
+application overrides of `findPrice()` do not govern that new path: put shared
+ownership restrictions in the model's relation, or implement them in
+`findPriceAt()` before exposing explicit-clock selection.
+
+The `currency` scope in the example matches a `price_scopes` row, not the price's
+`currency` column. Setting `default_currency` does not filter either API. Restrict
+the relation to an allowed currency, or validate the selected record before
+using it. Scope string comparison follows the database's configured collation;
+exact scope matching means the same complete set of dimensions, not a promise
+of case-sensitive comparison on every database.
+
+Price lists are tried in their loaded relation order; define that order in your
+user's `priceLists()` relationship. Within each list, the greatest matching
+`min_quantity` wins, with inclusive minimum and maximum bounds. Equal-minimum
+overlaps have no additional tie-break guarantee. Reject or order ambiguous
+overlaps in the application rather than relying on insertion order.
+
+The clock must use the same timezone convention as the stored validity timestamps.
+It is bound using the database connection's timestamp format; no timezone
+conversion or additional fractional-second precision is supplied. Pass a clock
+already normalized to your stored convention.
+The resolver does not round, convert currencies, cast amounts, write rows, or lock
+the selected record. Exact money storage and casts remain the application's
+responsibility: a value already stored as floating point cannot recover precision
+by selecting its record. Applications can override `prices()` with a scoped
+`MorphMany` relation to a `Price` subclass and override that model's `scopes()`
+relation for private tables. Tenant authorization, currency eligibility, overlapping
+rate policy, immutable quote snapshots, and transaction boundaries remain with the
+application. Selecting a user price list does not itself enforce tenant access.
+
+The record API does not evaluate the amount accessor. Reading `$price->unit_price`
+afterward still invokes that model's configured casts/accessors; use
+`getRawOriginal('unit_price')` for its raw saved representation. The supplied
+schema uses `DECIMAL(12,4)`; SQLite numeric affinity may nevertheless return a
+floating-point value. The exact-string tests use a custom text-backed relation
+to prove preservation, not to claim that this API changes database storage.
+
 ## Fallback Logic & Exception Handling
 
-If a user has no custom price (or no matching scope), the system can **fallback** to a default price (`price_list_id = null`). You can control this behavior via config:
+Both APIs first try each user price list, then the default list
+(`price_list_id = null`) using the same quantity, date and scope filters. A
+matching default is returned even when `fallback_to_default_price` is `false`;
+this existing behavior is preserved for compatibility.
 
-- `fallback_to_default_price`: `true` or `false`.
-- `throw_exception_if_no_price_found`: If set to `true`, throws a `PriceNotFoundException` if no price is found after fallback.
+Only when no record matches does configuration determine the result:
 
-This ensures you **never** end up with an undefined or zero price unless you explicitly allow it.
+| `fallback_to_default_price` | `throw_exception_if_no_price_found` | No matching record |
+| --- | --- | --- |
+| `true` | `false` | `null` |
+| `true` | `true` | `PriceNotFoundException` |
+| `false` | either | `PriceNotFoundException` |
+
+A saved zero price is a valid match. Amount validation remains with the host.
 
 ---
 

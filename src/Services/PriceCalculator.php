@@ -2,6 +2,7 @@
 
 namespace MrNewport\LaravelPriceable\Services;
 
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use MrNewport\LaravelPriceable\Exceptions\PriceNotFoundException;
@@ -14,19 +15,33 @@ class PriceCalculator
      */
     public function getPrice(Model $priceableModel, int $quantity = 1, $user = null, array $scopes = []): ?float
     {
+        return $this->resolvePrice($priceableModel, $quantity, $user, $scopes)?->unit_price;
+    }
+
+    /**
+     * Resolve the saved price record without converting its amount to a float.
+     *
+     * The effective clock uses the same timezone as the stored validity timestamps.
+     * A null clock retains the existing current-time and findPrice override behavior.
+     */
+    public function resolvePrice(Model $priceableModel, int $quantity = 1, $user = null, array $scopes = [], ?DateTimeInterface $effectiveAt = null): ?Price
+    {
+        $resolve = fn (?int $listId) => $effectiveAt === null
+            ? $this->findPrice($priceableModel, $quantity, $listId, $scopes)
+            : $this->findPriceAt($priceableModel, $quantity, $listId, $scopes, $effectiveAt);
         // 1. Gather the user's PriceLists if any
         $priceLists = $this->getUserPriceLists($user);
 
         // 2. Try each PriceList in order
         foreach ($priceLists as $list) {
-            $price = $this->findPrice($priceableModel, $quantity, $list->id, $scopes);
+            $price = $resolve($list->id);
             if ($price) {
-                return $price->unit_price;
+                return $price;
             }
         }
 
         // 3. Fallback to default (price_list_id = null)
-        $fallbackPrice = $this->findPrice($priceableModel, $quantity, null, $scopes);
+        $fallbackPrice = $resolve(null);
 
         // 4. Handle fallback or exception
         if (!$fallbackPrice) {
@@ -39,7 +54,7 @@ class PriceCalculator
             return null;
         }
 
-        return $fallbackPrice->unit_price;
+        return $fallbackPrice;
     }
 
     /**
@@ -56,6 +71,12 @@ class PriceCalculator
 
     protected function findPrice(Model $priceableModel, int $quantity, ?int $priceListId, array $scopes): ?Price
     {
+        return $this->findPriceAt($priceableModel, $quantity, $priceListId, $scopes, now());
+    }
+
+    /** Resolve at an explicit clock without changing the legacy protected hook signature. */
+    protected function findPriceAt(Model $priceableModel, int $quantity, ?int $priceListId, array $scopes, DateTimeInterface $effectiveAt): ?Price
+    {
         $query = $priceableModel->prices()
             ->where('price_list_id', $priceListId)
             ->where('min_quantity', '<=', $quantity)
@@ -63,13 +84,13 @@ class PriceCalculator
                 $q->whereNull('max_quantity')
                     ->orWhere('max_quantity', '>=', $quantity);
             })
-            ->where(function ($q) {
+            ->where(function ($q) use ($effectiveAt) {
                 $q->whereNull('valid_from')
-                    ->orWhere('valid_from', '<=', now());
+                    ->orWhere('valid_from', '<=', $effectiveAt);
             })
-            ->where(function ($q) {
+            ->where(function ($q) use ($effectiveAt) {
                 $q->whereNull('valid_to')
-                    ->orWhere('valid_to', '>=', now());
+                    ->orWhere('valid_to', '>=', $effectiveAt);
             });
 
         // Exclude or include scoped prices properly

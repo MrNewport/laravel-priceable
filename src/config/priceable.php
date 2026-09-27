@@ -14,8 +14,9 @@ return [
     | Default Fallback Logic
     |--------------------------------------------------------------------------
     |
-    | If a specific price isn't found in a user's PriceList(s), we can
-    | fallback to the default price (price_list_id = null).
+    | Compatibility: the default list is always searched after user lists.
+    | False throws when no record matches; it does not suppress an existing
+    | default record. See the README missing-price policy table.
     |
     */
     'fallback_to_default_price' => true,
@@ -25,8 +26,8 @@ return [
     | Throw Exception If No Price Found
     |--------------------------------------------------------------------------
     |
-    | If we can't find a price (and fallback is disabled), do we throw an
-    | exception or return null?
+    | True throws when no user-list or default record matches. When false,
+    | null is returned only if fallback_to_default_price is also true.
     |
     */
     'throw_exception_if_no_price_found' => false,
@@ -35,6 +36,11 @@ return [
     |--------------------------------------------------------------------------
     | Default Currency
     |--------------------------------------------------------------------------
+    |
+    | Retained configuration only; the resolver does not filter currency or
+    | apply this value to models. The supplied migration defaults to USD.
+    | Applications must explicitly set and restrict their allowed currencies.
+    |
     */
     'default_currency' => 'USD',
 
