@@ -2,6 +2,8 @@
 
 Quantity tiers, ordered customer price lists, validity windows and exact scope-set unit-price resolution for Eloquent models. The nullable float result is a current quote input; currency policy, accepted snapshots and accounting stay in the host.
 
+**[Interactive workshop](https://matthewnewport.com/packages/laravel-priceable/lab)** — Try guided examples in your browser.
+
 ```sh
 composer require mrnewport/laravel-priceable:^1.2
 ```
